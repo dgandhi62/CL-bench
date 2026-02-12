@@ -14,7 +14,7 @@ Usage:
     python eval.py --input outputs/model_output.jsonl --output outputs/model_graded.jsonl
     
     # Using AWS Bedrock (Claude)
-    python eval.py --input outputs/model_output.jsonl --judge-model anthropic.claude-3-5-sonnet-20241022-v2:0 --aws-region us-east-1
+    python eval.py --input outputs/model_output.jsonl --model-type bedrock --judge-model anthropic.claude-3-5-sonnet-20241022-v2:0 --aws-region us-east-1
     
     # Concurrent evaluation
     python eval.py --input outputs/model_output.jsonl --workers 5
@@ -75,7 +75,7 @@ def build_rubrics_text(rubrics):
     return "\n".join(lines) if lines else "No specific rubrics provided."
 
 
-def call_judge_api(client, model, rubrics_text, model_output, max_retries=3, retry_delay=3):
+def call_judge_api(client, model, rubrics_text, model_output, model_type="openai", max_retries=3, retry_delay=3):
     """
     Call judge model API for grading (only handles API call, returns raw text).
     
@@ -84,6 +84,7 @@ def call_judge_api(client, model, rubrics_text, model_output, max_retries=3, ret
         model: Judge model name
         rubrics_text: Formatted rubrics text
         model_output: Model's response to be graded
+        model_type: API type (openai, bedrock, etc.)
         max_retries: Maximum number of retries for API call
         retry_delay: Delay between retries (seconds)
     
@@ -125,24 +126,23 @@ def call_judge_api(client, model, rubrics_text, model_output, max_retries=3, ret
         "}\n"
     )
     
-    # Auto-detect Bedrock from model name pattern
-    is_bedrock = '.' in model and (':' in model or model.startswith(('anthropic.', 'amazon.', 'meta.', 'mistral.', 'cohere.')))
-    
     for attempt in range(max_retries):
         try:
-            if is_bedrock:
+            if model_type == "bedrock":
                 response = client.converse(
                     modelId=model,
                     messages=[{"role": "user", "content": [{"text": grading_prompt}]}]
                 )
                 result_text = response['output']['message']['content'][0]['text'].strip()
-            else:
+            elif model_type == "openai":
                 messages = [{"role": "user", "content": grading_prompt}]
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
                 )
                 result_text = response.choices[0].message.content.strip()
+            else:
+                raise ValueError(f"Unsupported model type: {model_type}")
             
             # Remove code block wrapper if present
             if result_text.startswith("```json"):
@@ -175,7 +175,7 @@ def get_task_id(item):
 
 def process_single_item(args):
     """Process a single item for grading."""
-    item, client, judge_model, max_retries = args
+    item, client, judge_model, model_type, max_retries = args
     idx = get_task_id(item)
     
     model_output = item.get("model_output", "")
@@ -199,7 +199,7 @@ def process_single_item(args):
     for parse_attempt in range(max_retries):
         # Call judge API
         grading_result = call_judge_api(
-            client, judge_model, rubrics_text, model_output, max_retries
+            client, judge_model, rubrics_text, model_output, model_type, max_retries
         )
         
         if not grading_result:
@@ -270,10 +270,11 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluation Script - OpenAI API Judge")
     parser.add_argument("--input", type=str, required=True, help="Input JSONL file path")
     parser.add_argument("--output", type=str, default=None, help="Output JSONL file path")
-    parser.add_argument("--judge-model", type=str, default="gpt-5.1", help="Judge model name (OpenAI: gpt-5.1, Bedrock: anthropic.claude-3-5-sonnet-20241022-v2:0)")
-    parser.add_argument("--aws-region", type=str, default="us-east-1", help="AWS region (for Bedrock models only)")
-    parser.add_argument("--base-url", type=str, default=None, help="API Base URL (for OpenAI-compatible APIs only)")
-    parser.add_argument("--api-key", type=str, default=None, help="API Key (for OpenAI-compatible APIs only)")
+    parser.add_argument("--judge-model", type=str, default="gpt-5.1", help="Judge model name")
+    parser.add_argument("--model-type", type=str, default="openai", help="API type (openai, bedrock, etc.)")
+    parser.add_argument("--aws-region", type=str, default="us-east-1", help="AWS region (for Bedrock)")
+    parser.add_argument("--base-url", type=str, default=None, help="API Base URL (for OpenAI-compatible APIs)")
+    parser.add_argument("--api-key", type=str, default=None, help="API Key (for OpenAI-compatible APIs)")
     parser.add_argument("--workers", type=int, default=1, help="Number of concurrent workers")
     parser.add_argument("--max-retries", type=int, default=3, help="Max retries per item")
     args = parser.parse_args()
@@ -289,14 +290,12 @@ def main():
     log(f"📥 Input file: {args.input}")
     log(f"📤 Output file: {args.output}")
     log(f"🤖 Judge model: {args.judge_model}")
+    log(f"🔧 Model type: {args.model_type}")
     log(f"⚡ Workers: {args.workers}")
     log("=" * 60)
     
-    # Auto-detect Bedrock from model name
-    is_bedrock = '.' in args.judge_model and (':' in args.judge_model or args.judge_model.startswith(('anthropic.', 'amazon.', 'meta.', 'mistral.', 'cohere.')))
-    
-    # Initialize client
-    if is_bedrock:
+    # Initialize client based on model type
+    if args.model_type == "bedrock":
         try:
             import boto3
         except ImportError:
@@ -305,7 +304,7 @@ def main():
         
         client = boto3.client('bedrock-runtime', region_name=args.aws_region)
         log(f"🔗 Using AWS Bedrock in region: {args.aws_region}")
-    else:
+    elif args.model_type == "openai":
         api_key = args.api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             log("❌ Error: Please set OPENAI_API_KEY or use --api-key argument")
@@ -317,6 +316,9 @@ def main():
             log(f"🔗 Using custom API: {args.base_url}")
         
         client = OpenAI(**client_kwargs)
+    else:
+        log(f"❌ Error: Unsupported model type: {args.model_type}")
+        return
     
     # Load data
     log("📖 Loading data...")
@@ -346,7 +348,7 @@ def main():
     log(f"🚀 Starting evaluation ({len(pending_items)} pending)...")
     
     # Prepare tasks
-    tasks = [(item, client, args.judge_model, args.max_retries) for item in pending_items]
+    tasks = [(item, client, args.judge_model, args.model_type, args.max_retries) for item in pending_items]
     
     # Statistics
     success_count = 0
