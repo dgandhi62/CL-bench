@@ -132,9 +132,10 @@ def call_judge_api(client, model, rubrics_text, model_output, model_type="openai
     for attempt in range(max_retries):
         try:
             if model_type == "bedrock":
+                messages=[{"role": "user", "content": [{"text": grading_prompt}]}]
                 response = client.converse(
                     modelId=model,
-                    messages=[{"role": "user", "content": [{"text": grading_prompt}]}]
+                    messages=messages
                 )
                 result_text = response['output']['message']['content'][0]['text'].strip()
             elif model_type == "openai":
