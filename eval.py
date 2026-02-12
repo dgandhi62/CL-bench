@@ -16,6 +16,9 @@ Usage:
     # Using AWS Bedrock (Claude)
     python eval.py --input outputs/model_output.jsonl --model-type bedrock --judge-model anthropic.claude-3-5-sonnet-20241022-v2:0 --aws-region us-east-1
     
+    # Using OpenAI-compatible APIs (DeepSeek, etc.)
+    python eval.py --input outputs/model_output.jsonl --model-type openai --judge-model deepseek-chat --base-url https://api.deepseek.com/v1 --api-key your_key
+    
     # Concurrent evaluation
     python eval.py --input outputs/model_output.jsonl --workers 5
 """
