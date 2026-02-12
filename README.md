@@ -93,7 +93,11 @@ Each sample contains:
 ### Prerequisites
 
 ```bash
+# For OpenAI models
 pip install openai tqdm
+
+# For AWS Bedrock models (optional)
+pip install boto3
 ```
 
 ### 1. Run Inference
@@ -120,6 +124,19 @@ python infer.py --model gpt-5.1 --workers 20
 ```bash
 # Evaluate model outputs using GPT-5.1 as judge
 python eval.py --input outputs/gpt5-1.jsonl --judge-model gpt-5.1
+
+# Use AWS Bedrock (Claude) as judge
+python eval.py --input outputs/model.jsonl \
+    --model-type bedrock \
+    --judge-model anthropic.claude-3-5-sonnet-20240620-v1:0 \
+    --aws-region us-east-1
+
+# Use OpenAI-compatible APIs (DeepSeek, etc.) as judge
+python eval.py --input outputs/model.jsonl \
+    --model-type openai \
+    --judge-model deepseek-chat \
+    --base-url https://api.deepseek.com/v1 \
+    --api-key your_key
 ```
 
 ## 📁 File Structure
@@ -158,6 +175,8 @@ CL-bench/
 | `--input`       | Required       | Input JSONL file path        |
 | `--output`      | Auto-generated | Output file path             |
 | `--judge-model` | `gpt-5.1`      | Judge model name             |
+| `--model-type`  | `openai`       | API type (openai, bedrock)   |
+| `--aws-region`  | `us-east-1`    | AWS region (for Bedrock)     |
 | `--base-url`    | None           | Custom API base URL          |
 | `--api-key`     | From env       | API key                      |
 | `--workers`     | 1              | Number of concurrent workers |
