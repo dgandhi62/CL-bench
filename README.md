@@ -96,7 +96,7 @@ Each sample contains:
 # For OpenAI models
 pip install openai tqdm
 
-# For AWS Bedrock models (optional)
+# For AWS Bedrock models
 pip install boto3
 ```
 
@@ -126,17 +126,11 @@ python infer.py --model gpt-5.1 --workers 20
 python eval.py --input outputs/gpt5-1.jsonl --judge-model gpt-5.1
 
 # Use AWS Bedrock (Claude) as judge
-python eval.py --input outputs/model.jsonl \
+python eval.py --input outputs/modelName.jsonl \
     --model-type bedrock \
-    --judge-model anthropic.claude-3-5-sonnet-20240620-v1:0 \
+    --judge-model modelName\
     --aws-region us-east-1
 
-# Use OpenAI-compatible APIs (DeepSeek, etc.) as judge
-python eval.py --input outputs/model.jsonl \
-    --model-type openai \
-    --judge-model deepseek-chat \
-    --base-url https://api.deepseek.com/v1 \
-    --api-key your_key
 ```
 
 ## 📁 File Structure
